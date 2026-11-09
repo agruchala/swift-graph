@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# SwiftPM (matches nested fixture packages too)
+.build/
+.swiftpm/
+
+# Xcode
+xcuserdata/
+DerivedData/
+*.xcuserstate
+
+# Test fixture outputs
+Tests/Fixtures/Sample/.swiftgraph/
