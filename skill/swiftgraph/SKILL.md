@@ -19,7 +19,7 @@ swiftgraph find <text>          # not sure of the name? list matching symbols
 
 `<symbol>` can be `name`, `Type.name`, `Inner.name` for nested types, `Module.Type.name`, `name(label:)`, or the 12-char id from a previous answer. A symbol whose full name matches exactly wins over partial matches.
 
-Options: `--depth N` (default 3), `--limit N` printed nodes (default 150), `--no-tests`, `--exclude <Module>` (repeatable, treat a module as a leaf), `--repo <path>`.
+Options: `--depth N` (default 3), `--limit N` printed nodes (default 150), `--no-tests`, `--exclude <Module>` (repeatable, treat a module as a leaf), `--refs` (`callees` only: also list types and enum cases referenced; hidden by default), `--repo <path>`.
 
 ## Ambiguous names
 

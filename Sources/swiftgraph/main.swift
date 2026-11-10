@@ -81,6 +81,7 @@ struct TreeOptions: ParsableArguments {
   @Option(help: "Max printed nodes.") var limit = 150
   @Flag(name: .customLong("no-tests"), help: "Hide test code.") var noTests = false
   @Option(help: "Treat this module as a leaf (repeatable).") var exclude: [String] = []
+  @Flag(help: "callees: also list `references` (types, enum cases); hidden by default.") var refs = false
 
   func run(_ dir: Direction, repo: URL) throws {
     let g = try loadOrBootstrap(repo)
@@ -92,6 +93,7 @@ struct TreeOptions: ParsableArguments {
     o.limit = limit
     o.hideTests = noTests
     o.exclude = Set(exclude)
+    o.refs = refs
     print(q.tree(root, dir, o), terminator: "")
   }
 }

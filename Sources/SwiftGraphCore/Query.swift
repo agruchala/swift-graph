@@ -7,6 +7,8 @@ public struct QueryOptions: Sendable {
   public var limit = 150
   public var hideTests = false
   public var exclude: Set<String> = []
+  /// Show `references` (types in signatures, enum cases) in callees. Callers always show them.
+  public var refs = false
   public init() {}
 }
 
@@ -130,7 +132,7 @@ public struct Query {
         }
       }
     case .callees:
-      for e in outgoing[n.id] ?? [] where e.kind != .override {
+      for e in outgoing[n.id] ?? [] where e.kind != .override && (opts.refs || e.kind != .ref) {
         if let to = graph.nodes[e.to] { direct.append(Child(verb: Self.verb(e.kind, dir), node: to, edge: e)) }
       }
       // Implementations a call to this requirement / base method can dispatch to.

@@ -109,6 +109,17 @@ final class QueryTests: XCTestCase {
     XCTAssertTrue(q.tree(loop, .callers, QueryOptions()).contains("called by ViewModel.loop(_:)  App/ViewModel.swift:14  … (see above)"))
   }
 
+  func testCalleesHideReferencesByDefault() {
+    let g = Graph(header: graph.header, nodes: graph.nodes,
+                  edges: graph.edges + [e(stamp, pname, .ref, "App/ViewModel.swift", 11)])
+    let q = Query(graph: g)
+    XCTAssertFalse(q.tree(stamp, .callees, QueryOptions()).contains("references"))
+    var o = QueryOptions()
+    o.refs = true
+    XCTAssertTrue(q.tree(stamp, .callees, o).contains("references Profile.name"))
+    XCTAssertTrue(q.tree(pname, .callers, QueryOptions()).contains("referenced by ViewModel.stamp()"), "callers keep refs")
+  }
+
   func testExternalIsLeaf() {
     XCTAssertEqual(q.tree(stamp, .callees, QueryOptions()), """
       ViewModel.stamp()  [instanceMethod]  App/ViewModel.swift:11
