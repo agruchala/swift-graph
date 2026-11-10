@@ -132,7 +132,7 @@ public struct Query {
 
     func line(_ c: Child) -> String {
       let head = (c.verb.map { $0 + " " } ?? "") + c.node.name
-      if isLeaf(c.node, opts) { return "\(head)  [external \(c.node.module)]" }
+      if isLeaf(c.node, opts) { return c.node.module == "external" ? "\(head)  [external]" : "\(head)  [external \(c.node.module)]" }
       if expanded.contains(c.node.id) { return "\(head)  … (see above)" }
       var s = head + "  "
       if dir == .callers, let e = c.edge {

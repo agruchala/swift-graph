@@ -15,6 +15,6 @@ let package = Package(
     .executableTarget(name: "swiftgraph", dependencies: [
       "SwiftGraphCore", .product(name: "ArgumentParser", package: "swift-argument-parser"),
     ]),
-    .testTarget(name: "SwiftGraphCoreTests", dependencies: ["SwiftGraphCore"], exclude: []),
+    .testTarget(name: "SwiftGraphCoreTests", dependencies: ["SwiftGraphCore", "swiftgraph"]),
   ]
 )

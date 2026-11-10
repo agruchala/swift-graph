@@ -76,6 +76,13 @@ final class QueryTests: XCTestCase {
       """)
   }
 
+  func testUnknownModuleExternal() {
+    let main = Self.n("main", "classProperty", "external", nil, nil, ext: true)
+    let g = Graph(header: graph.header, nodes: graph.nodes.merging([main.id: main]) { a, _ in a },
+                  edges: graph.edges + [e(stamp, main, .read, "App/ViewModel.swift", 11)])
+    XCTAssertTrue(Query(graph: g).tree(stamp, .callees, QueryOptions()).contains("reads main  [external]\n"))
+  }
+
   func testExcludedModuleIsLeaf() {
     var o = QueryOptions()
     o.exclude = ["AppTests"]
