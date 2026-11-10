@@ -10,3 +10,9 @@ protocol Stamped { var stamp: Int { get } }
 struct Event { var stamp: Int }
 extension Event: Stamped {}
 func readStamp(_ s: any Stamped) -> Int { s.stamp }
+
+func cleanup() {}
+final class Holder { deinit { cleanup() } }
+
+enum Outer { struct Inner { func inBody() {} } }
+extension Outer.Inner { func inExt() {} }

@@ -83,6 +83,36 @@ final class CLITests: XCTestCase {
     XCTAssertTrue(r.err.contains("add \"project\" and \"schemes\" to .swiftgraph/config.json"), r.err)
   }
 
+  func testEmptyGraphRefused() throws {
+    let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: tmp.appendingPathComponent(".swiftgraph"), withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tmp) }
+    try sh(["git", "init", "-q"], cwd: tmp)
+    try #"{"stores": ["\#(try Fixture.storePath())"]}"#
+      .write(to: tmp.appendingPathComponent(".swiftgraph/config.json"), atomically: true, encoding: .utf8)
+    let r = try run(["index"], repo: tmp)
+    XCTAssertNotEqual(r.status, 0)
+    XCTAssertTrue(r.err.contains("no indexed Swift files"), r.err)
+    XCTAssertFalse(fm.fileExists(atPath: tmp.appendingPathComponent(".swiftgraph/graph.local.txt").path))
+  }
+
+  func testNoWarningWhenOnlyNonSwiftCommitsSinceGraph() throws {
+    let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try fm.createDirectory(at: tmp, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tmp) }
+    let git = { (args: [String]) in try sh(["git", "-c", "user.name=t", "-c", "user.email=t@t"] + args, cwd: tmp) }
+    try "let a = 1\n".write(to: tmp.appendingPathComponent("a.swift"), atomically: true, encoding: .utf8)
+    try git(["init", "-q"]); try git(["add", "."]); try git(["commit", "-qm", "a"])
+    let built = try git(["rev-parse", "HEAD"])
+    try "x".write(to: tmp.appendingPathComponent("graph.txt"), atomically: true, encoding: .utf8)
+    try git(["add", "."]); try git(["commit", "-qm", "graph"])
+    let g = Graph(header: Header(commit: built, dirty: false, staleFiles: 0), nodes: [:], edges: [])
+    XCTAssertNil(GraphStore.warning(for: g, repo: tmp))
+    try "let a = 2\n".write(to: tmp.appendingPathComponent("a.swift"), atomically: true, encoding: .utf8)
+    try git(["commit", "-qam", "edit"])
+    XCTAssertNotNil(GraphStore.warning(for: g, repo: tmp))
+  }
+
   func testStaleWarning() throws {
     var g = Graph(header: Header(commit: "none", dirty: false, staleFiles: 3), nodes: [:], edges: [])
     XCTAssertEqual(GraphStore.warning(for: g, repo: Fixture.root),

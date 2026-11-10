@@ -64,6 +64,47 @@ final class QueryTests: XCTestCase {
       .contains("called by ViewModel.persist()  App/ViewModel.swift:10  (+2 more)  via protocol"))
   }
 
+  func testCallersFollowOverrideChain() {
+    let p = Self.n("P.f()", "instanceMethod", "M", "m.swift", 1, proto: true)
+    let base = Self.n("Base.f()", "instanceMethod", "M", "m.swift", 2)
+    let sub = Self.n("Sub.f()", "instanceMethod", "M", "m.swift", 3)
+    let viaP = Self.n("useP()", "function", "M", "m.swift", 4)
+    let viaBase = Self.n("useBase()", "function", "M", "m.swift", 5)
+    let g = Graph(header: graph.header,
+                  nodes: Dictionary(uniqueKeysWithValues: [p, base, sub, viaP, viaBase].map { ($0.id, $0) }),
+                  edges: [e(base, p, .override, "m.swift", 2), e(sub, base, .override, "m.swift", 3),
+                          e(viaP, p, .call, "m.swift", 4), e(viaBase, base, .call, "m.swift", 5)])
+    let out = Query(graph: g).tree(sub, .callers, QueryOptions())
+    XCTAssertTrue(out.contains("called by useP()  m.swift:4  via protocol"), out)
+    XCTAssertTrue(out.contains("called by useBase()  m.swift:5  via override"), out)
+  }
+
+  func testResolveNestedTypeSuffix() {
+    let inner = Self.n("Outer.Inner.inBody()", "instanceMethod", "M", "m.swift", 1)
+    let g = Graph(header: graph.header, nodes: [inner.id: inner], edges: [])
+    guard case .found(let f) = Query(graph: g).resolve("Inner.inBody") else { return XCTFail("not found") }
+    XCTAssertEqual(f, inner)
+  }
+
+  func testExactNameBeatsSuffixMatch() {
+    let exact = Self.n("Entry.timestamp", "instanceProperty", "P", "a.swift", 1)
+    let nested = Self.n("SchemaV2.Entry.timestamp", "instanceProperty", "P", "b.swift", 1)
+    let g = Graph(header: graph.header, nodes: [exact.id: exact, nested.id: nested], edges: [])
+    guard case .found(let f) = Query(graph: g).resolve("Entry.timestamp") else { return XCTFail("not found") }
+    XCTAssertEqual(f, exact)
+  }
+
+  func testCandidatesCapped() {
+    let ns = (0..<35).map { Self.n("T\($0).body", "instanceProperty", "M", "m.swift", $0) }
+    let lines = Query.candidates(ns, max: 30).split(separator: "\n")
+    XCTAssertEqual(lines.count, 31)
+    XCTAssertEqual(lines.last, "… 5 more; qualify with Type.name, Module.Type.name, or an id")
+  }
+
+  func testCandidateLineMarksRequirement() {
+    XCTAssertTrue(Query.candidateLine(save).hasSuffix("  (protocol requirement)"))
+  }
+
   func testRecursionTerminates() {
     XCTAssertTrue(q.tree(loop, .callers, QueryOptions()).contains("called by ViewModel.loop(_:)  … (see above)"))
   }

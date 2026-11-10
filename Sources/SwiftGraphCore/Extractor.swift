@@ -24,7 +24,7 @@ public struct Extractor {
 
   static let keptKinds: Set<IndexSymbolKind> = [
     .class, .struct, .enum, .protocol, .function, .instanceMethod, .classMethod, .staticMethod,
-    .instanceProperty, .classProperty, .staticProperty, .constructor, .enumConstant, .variable,
+    .instanceProperty, .classProperty, .staticProperty, .constructor, .destructor, .enumConstant, .variable,
   ]
   static let typeKinds: Set<IndexSymbolKind> = [.class, .struct, .enum, .protocol]
 
@@ -44,10 +44,30 @@ public struct Extractor {
     return String(rest.dropFirst(digits.count).prefix(len))
   }
 
+  /// Repo-relative Swift sources: git's tracked + untracked-not-ignored files, or a directory walk when
+  /// `repoRoot` isn't a git repo. `.swiftgraph/` (its DerivedData holds generated code) is never included.
+  static func swiftFiles(repoRoot: URL) -> [String] {
+    var files: [String]
+    if let out = try? sh(["git", "-c", "core.quotePath=false", "ls-files", "-z", "--cached", "--others",
+                          "--exclude-standard", "--", "*.swift"], cwd: repoRoot) {
+      files = out.split(separator: "\0").map(String.init)
+    } else {
+      files = []
+      let base = repoRoot.standardizedFileURL.path + "/"
+      let e = FileManager.default.enumerator(at: repoRoot, includingPropertiesForKeys: [.isDirectoryKey],
+                                             options: [.skipsHiddenFiles, .skipsPackageDescendants])
+      while let u = e?.nextObject() as? URL {
+        if u.pathExtension == "noindex" || u.lastPathComponent == "DerivedData" { e?.skipDescendants(); continue }
+        let path = u.standardizedFileURL.path
+        if u.pathExtension == "swift", path.hasPrefix(base) { files.append(String(path.dropFirst(base.count))) }
+      }
+    }
+    return files.filter { !$0.hasPrefix(".swiftgraph/") }.sorted()
+  }
+
   public func extract() throws -> Graph {
     let root = repoRoot.path
-    let files = ((try? sh(["git", "ls-files", "--cached", "--others", "--exclude-standard", "--", "*.swift"], cwd: repoRoot)) ?? "")
-      .split(separator: "\n").map(String.init).sorted()
+    let files = Self.swiftFiles(repoRoot: repoRoot)
 
     var dbs: [IndexStoreDB] = []
     var tempDirs: [URL] = []
@@ -68,17 +88,25 @@ public struct Extractor {
     // Per file: occurrences from the store with the newest unit for it.
     var perFile: [(rel: String, occs: [SymbolOccurrence])] = []
     var stale = 0
+    var unindexed: [Date] = []  // mtimes of files no store has a unit for
     for rel in files {
       let abs = root + "/" + rel
       var best: (IndexStoreDB, Date)?
       for db in dbs {
         if let d = db.dateOfLatestUnitFor(filePath: abs), best.map({ d > $0.1 }) ?? true { best = (db, d) }
       }
-      guard let (db, date) = best else { continue }
-      if let mtime = (try? FileManager.default.attributesOfItem(atPath: abs))?[.modificationDate] as? Date, mtime > date {
-        stale += 1
+      let mtime = (try? FileManager.default.attributesOfItem(atPath: abs))?[.modificationDate] as? Date
+      guard let (db, date) = best else {
+        if let mtime { unindexed.append(mtime) }
+        continue
       }
+      if let mtime, mtime > date { stale += 1 }
       perFile.append((rel, db.symbolOccurrences(inFilePath: abs)))
+    }
+    // A file with no unit that is newer than the newest build is new since then (Package.swift and other
+    // never-compiled files are older, so they don't count).
+    if let newest = perFile.compactMap({ f in dbs.compactMap { $0.dateOfLatestUnitFor(filePath: root + "/" + f.rel) }.max() }).max() {
+      stale += unindexed.filter { $0 > newest }.count
     }
 
     // Pass 1: definitions.
@@ -90,9 +118,11 @@ public struct Extractor {
     // (impl USR, base USR, site). Recorded on definitions, and as implicit occurrences at
     // retroactive conformances (`extension Foo: Proto {}`).
     var overrides: [(String, String, String, SymbolLocation)] = []
+    var extendedType: [String: String] = [:]  // extension USR → extended type USR
     for (rel, occs) in perFile {
       for o in occs {
         for r in o.relations where r.roles.contains(.overrideOf) { overrides.append((o.symbol.usr, r.symbol.usr, rel, o.location)) }
+        for r in o.relations where r.roles.contains(.extendedBy) { extendedType[r.symbol.usr] = o.symbol.usr }
       }
       for o in occs where o.roles.contains(.definition) {
         let usr = o.symbol.usr
@@ -110,13 +140,12 @@ public struct Extractor {
     }
 
     func displayName(_ usr: String, depth: Int = 0) -> String {
+      // Members of `extension Outer.Inner` are named through the extended type, like members declared in its body.
+      if depth < 8, let t = extendedType[usr], nameOf[t] != nil { return displayName(t, depth: depth + 1) }
       let own = nameOf[usr] ?? usr
       guard depth < 8, let p = parentOf[usr] else { return own }
       return displayName(p.usr, depth: depth + 1) + "." + own
     }
-
-    // Modules whose source is in the repo. Their undefined symbols are macro-generated or stale, not external.
-    let ownModules = Set(defs.values.map(\.occ.location.moduleName)).subtracting(blocklist)
 
     var nodes: [String: Node] = [:]
     var idOf: [String: String] = [:]
@@ -163,7 +192,7 @@ public struct Extractor {
         if let id = idOf[sym.usr] {
           to = id
         } else {
-          if kind == .ref || ownModules.contains(Self.moduleFromUSR(sym.usr)) { continue }
+          if kind == .ref { continue }
           to = nodeID(usr: sym.usr)
           if nodes[to] == nil {
             let container = o.relations.first(where: { $0.roles.contains(.receivedBy) })?.symbol.name

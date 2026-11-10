@@ -44,6 +44,9 @@ public enum GraphStore {
     }
     guard g.header.commit != "none", let head = try? sh(["git", "rev-parse", "HEAD"], cwd: repo),
           !head.isEmpty, head != g.header.commit else { return nil }
+    // Commits since the graph that touch no Swift file (e.g. the one committing graph.txt) don't make it stale.
+    // An unknown commit (shallow clone, rewritten history) makes `git diff` fail: warn.
+    if (try? sh(["git", "diff", "--quiet", g.header.commit, "HEAD", "--", "*.swift"], cwd: repo)) != nil { return nil }
     return "! graph built from \(g.header.commit.prefix(7)), HEAD is \(head.prefix(7))"
   }
 

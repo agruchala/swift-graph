@@ -17,7 +17,7 @@ swiftgraph callees <symbol>     # what it calls / reads / writes / references, t
 swiftgraph find <text>          # not sure of the name? list matching symbols
 ```
 
-`<symbol>` can be `name`, `Type.name`, `Module.Type.name`, `name(label:)`, or the 12-char id from a previous answer.
+`<symbol>` can be `name`, `Type.name`, `Inner.name` for nested types, `Module.Type.name`, `name(label:)`, or the 12-char id from a previous answer. A symbol whose full name matches exactly wins over partial matches.
 
 Options: `--depth N` (default 3), `--limit N` printed nodes (default 150), `--no-tests`, `--exclude <Module>` (repeatable, treat a module as a leaf), `--repo <path>`.
 
@@ -29,7 +29,7 @@ A short name like `body`, `init`, or `id` usually matches several symbols. swift
 3f9a1c2b7d40  [instanceProperty]  App.HomeView.body  Sources/App/HomeView.swift:18
 ```
 
-Re-run with the id (first column) or a more qualified name.
+Re-run with the id (first column) or a more qualified name. At most 30 candidates are listed, then `… N more`. `(protocol requirement)` at the end of a candidate line tells a requirement apart from a protocol-extension default of the same name. `find` uses the same format and cap.
 
 ## Reading the output
 

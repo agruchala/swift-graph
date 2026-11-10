@@ -20,7 +20,18 @@ func runIndex(repo: URL, build: Bool, ci: Bool) throws -> (Graph, URL) {
   if stores.isEmpty && !build { stores = try Builder.build(repo: repo, config: config) }
   if stores.isEmpty { throw BuildError.noBuildConfig }
   let g = try Extractor(repoRoot: repo, storePaths: stores, blocklist: Set(config.blocklist)).extract()
+  // Never write an empty graph: every later query would trust it instead of re-indexing.
+  guard !g.nodes.isEmpty else { throw IndexError.empty(stores) }
   return (g, try GraphStore.write(g, repo: repo, ci: ci))
+}
+
+enum IndexError: Error, CustomStringConvertible {
+  case empty([String])
+  var description: String {
+    guard case .empty(let stores) = self else { return "" }
+    return "no indexed Swift files under this repo in: \(stores.joined(separator: ", ")); "
+      + "build it (swiftgraph index --build) or set \"stores\" in .swiftgraph/config.json"
+  }
 }
 
 func loadOrBootstrap(_ repo: URL) throws -> Graph {
@@ -36,7 +47,7 @@ func resolveOrExit(_ q: Query, _ text: String) throws -> Node {
   case .found(let n): return n
   case .ambiguous(let ns):
     print("ambiguous: \(ns.count) matches")
-    ns.forEach { print(Query.candidateLine($0)) }
+    print(Query.candidates(ns), terminator: "")
     throw ExitCode(2)
   case .none:
     print("no symbol matches \"\(text)\"; try: swiftgraph find \(text)")
@@ -104,12 +115,12 @@ struct Find: ParsableCommand {
   @OptionGroup var repo: RepoOption
   @Argument var text: String
   func run() throws {
-    let found = Query(graph: try loadOrBootstrap(repo.url)).find(text)
+    let found = Query(graph: try loadOrBootstrap(repo.url)).find(text, max: .max)
     guard !found.isEmpty else {
       print("no symbol matches \"\(text)\"; try a shorter name")
       throw ExitCode(1)
     }
-    found.forEach { print(Query.candidateLine($0)) }
+    print(Query.candidates(found), terminator: "")
   }
 }
 

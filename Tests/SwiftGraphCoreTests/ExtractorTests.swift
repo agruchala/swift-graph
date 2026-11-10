@@ -132,6 +132,45 @@ final class ExtractorTests: XCTestCase {
     XCTAssertFalse(try g.nodes.values.contains { $0.name == "ViewModelTests.init(invocation:)" })
   }
 
+  func testDeinitIsACaller() throws {
+    XCTAssertNotNil(try edge("Holder.deinit", "cleanup()", .call))
+  }
+
+  func testExtensionMembersNamedThroughExtendedType() throws {
+    XCTAssertNoThrow(try node("Outer.Inner.inBody()"))
+    XCTAssertNoThrow(try node("Outer.Inner.inExt()"))
+  }
+
+  func testUnbuiltNewFileCountsAsStale() throws {
+    let file = Fixture.root.appendingPathComponent("Sources/App/Unbuilt.swift")
+    try "func unbuilt() {}\n".write(to: file, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(at: file) }
+    XCTAssertEqual(try extract().header.staleFiles, 1)
+  }
+
+  func testSwiftFilesWithoutGit() throws {
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    for f in ["a.swift", "sub dir/b.swift", ".build/x.swift", ".swiftgraph/DerivedData/y.swift", "c.txt"] {
+      let u = tmp.appendingPathComponent(f)
+      try FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try "".write(to: u, atomically: true, encoding: .utf8)
+    }
+    XCTAssertEqual(Extractor.swiftFiles(repoRoot: tmp), ["a.swift", "sub dir/b.swift"])
+  }
+
+  func testSwiftFilesNonASCIIAndSkipsSwiftgraphDir() throws {
+    let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: tmp) }
+    for f in ["Zażółć.swift", ".swiftgraph/DerivedData/Gen.swift"] {
+      let u = tmp.appendingPathComponent(f)
+      try FileManager.default.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try "".write(to: u, atomically: true, encoding: .utf8)
+    }
+    try sh(["git", "init", "-q"], cwd: tmp)
+    XCTAssertEqual(Extractor.swiftFiles(repoRoot: tmp), ["Zażółć.swift"])
+  }
+
   func testNoGitRepo() throws {
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)

@@ -36,19 +36,24 @@ public struct Query {
     return String(name[name.index(after: dot)...])
   }
 
+  /// Exact matches (full name or Module.name, with or without `(labels:)`) win; only when there are none do
+  /// partial ones count (last component, or a dotted suffix like `Inner.inBody`). Several matches → ambiguous.
   public func resolve(_ text: String) -> Resolution {
     if let n = graph.nodes[text] { return .found(n) }
-    let matches = graph.nodes.values.filter { n in
+    let exact = graph.nodes.values.filter { n in
       let full = n.module + "." + n.name
-      if n.name == text || Self.stripParens(n.name) == text || full == text || Self.stripParens(full) == text { return true }
+      return n.name == text || Self.stripParens(n.name) == text || full == text || Self.stripParens(full) == text
+    }
+    let matches = !exact.isEmpty ? exact : graph.nodes.values.filter { n in
+      if n.name.hasSuffix("." + text) || Self.stripParens(n.name).hasSuffix("." + text) { return true }
       guard !text.contains(".") else { return false }
       let last = Self.lastComponent(n.name)
       return last == text || Self.stripParens(last) == text
-    }.sorted { ($0.name, $0.id) < ($1.name, $1.id) }
+    }
     switch matches.count {
     case 0: return .none
     case 1: return .found(matches[0])
-    default: return .ambiguous(matches)
+    default: return .ambiguous(matches.sorted { ($0.name, $0.id) < ($1.name, $1.id) })
     }
   }
 
@@ -58,8 +63,15 @@ public struct Query {
       .sorted { ($0.name, $0.id) < ($1.name, $1.id) }.prefix(max))
   }
 
+  /// Candidate lines, at most `max`, then how many were left out.
+  public static func candidates(_ ns: [Node], max: Int = 30) -> String {
+    var out = ns.prefix(max).map { candidateLine($0) + "\n" }.joined()
+    if ns.count > max { out += "… \(ns.count - max) more; qualify with Type.name, Module.Type.name, or an id\n" }
+    return out
+  }
+
   public static func candidateLine(_ n: Node) -> String {
-    "\(n.id)  [\(n.kind)]  \(n.module).\(n.name)  \(loc(n) ?? "external")"
+    "\(n.id)  [\(n.kind)]  \(n.module).\(n.name)  \(loc(n) ?? "external")" + (n.isProtocolRequirement ? "  (protocol requirement)" : "")
   }
 
   static func loc(_ n: Node) -> String? { n.file.map { "\($0):\(n.line ?? 0)" } }
@@ -101,9 +113,16 @@ public struct Query {
       for e in incoming[n.id] ?? [] where e.kind != .override {
         if let from = graph.nodes[e.from] { direct.append(Child(verb: Self.verb(e.kind, dir), node: from, edge: e)) }
       }
-      // Calls made through the protocol requirement / base method this node implements.
-      for o in outgoing[n.id] ?? [] where o.kind == .override {
-        guard let base = graph.nodes[o.to] else { continue }
+      // Calls made through every protocol requirement / base method this node implements, up the chain.
+      var bases: [Node] = []
+      var seenBases: Set<String> = [n.id]
+      var frontier = [n.id]
+      while let id = frontier.popLast() {
+        for o in outgoing[id] ?? [] where o.kind == .override && seenBases.insert(o.to).inserted {
+          if let b = graph.nodes[o.to] { bases.append(b); frontier.append(b.id) }
+        }
+      }
+      for base in bases {
         for e in incoming[base.id] ?? [] where e.kind != .override {
           if let from = graph.nodes[e.from] {
             dispatch.append(Child(verb: Self.verb(e.kind, dir), node: from, edge: e, via: via(base)))
