@@ -18,7 +18,7 @@ func runIndex(repo: URL, build: Bool, ci: Bool) throws -> (Graph, URL) {
   let config = try Config.load(repoRoot: repo)
   var stores = build ? try Builder.build(repo: repo, config: config) : StoreLocator.find(repoRoot: repo, config: config)
   if stores.isEmpty && !build { stores = try Builder.build(repo: repo, config: config) }
-  if stores.isEmpty { throw BuildError.noBuildConfig }
+  if stores.isEmpty { throw BuildError.noBuildConfig(repo: repo) }
   let g = try Extractor(repoRoot: repo, storePaths: stores, blocklist: Set(config.blocklist)).extract()
   // Never write an empty graph: every later query would trust it instead of re-indexing.
   guard !g.nodes.isEmpty else { throw IndexError.empty(stores) }
@@ -124,4 +124,19 @@ struct Find: ParsableCommand {
   }
 }
 
-Swiftgraph.main()
+// Exit codes: 0 ok, 1 no symbol matches, 2 ambiguous, 3 tool error (64 bad usage, from ArgumentParser).
+do {
+  var command = try Swiftgraph.parseAsRoot()
+  do {
+    try command.run()
+  } catch let e as ExitCode {
+    Swiftgraph.exit(withError: e)
+  } catch where Swiftgraph.exitCode(for: error) != .failure {
+    Swiftgraph.exit(withError: error)  // ArgumentParser's own: help (0), usage (64)
+  } catch {
+    FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+    exit(3)
+  }
+} catch {
+  Swiftgraph.exit(withError: error)
+}

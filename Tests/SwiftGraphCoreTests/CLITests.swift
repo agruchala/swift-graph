@@ -79,7 +79,7 @@ final class CLITests: XCTestCase {
     defer { try? fm.removeItem(at: tmp) }
     try sh(["git", "init", "-q"], cwd: tmp)
     let r = try run(["index"], repo: tmp)
-    XCTAssertNotEqual(r.status, 0)
+    XCTAssertEqual(r.status, 3, "tool errors exit 3")
     XCTAssertTrue(r.err.contains("add \"project\" and \"schemes\" to .swiftgraph/config.json"), r.err)
   }
 
@@ -111,6 +111,43 @@ final class CLITests: XCTestCase {
     try "let a = 2\n".write(to: tmp.appendingPathComponent("a.swift"), atomically: true, encoding: .utf8)
     try git(["commit", "-qam", "edit"])
     XCTAssertNotNil(GraphStore.warning(for: g, repo: tmp))
+  }
+
+  func testNoConfigListsSchemes() throws {
+    let tmp = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    let schemes = tmp.appendingPathComponent("Foo.xcodeproj/xcshareddata/xcschemes")
+    try fm.createDirectory(at: schemes, withIntermediateDirectories: true)
+    defer { try? fm.removeItem(at: tmp) }
+    try "".write(to: schemes.appendingPathComponent("Foo App.xcscheme"), atomically: true, encoding: .utf8)
+    try sh(["git", "init", "-q"], cwd: tmp)
+    let r = try run(["index"], repo: tmp)
+    XCTAssertEqual(r.status, 3)
+    XCTAssertTrue(r.err.contains("Foo.xcodeproj: Foo App"), r.err)
+  }
+
+  func testCorruptLocalFallsBackToCommitted() throws {
+    try fm.createDirectory(at: sg, withIntermediateDirectories: true)
+    try GraphText.encode(Graph(header: Header(commit: "none", dirty: false, staleFiles: 7), nodes: [:], edges: []))
+      .write(to: sg.appendingPathComponent("graph.txt"), atomically: true, encoding: .utf8)
+    try "<<<<<<< HEAD\n".write(to: sg.appendingPathComponent("graph.local.txt"), atomically: true, encoding: .utf8)
+    try fm.setAttributes([.modificationDate: Date().addingTimeInterval(60)], ofItemAtPath: sg.appendingPathComponent("graph.local.txt").path)
+    XCTAssertEqual(try GraphStore.load(repo: Fixture.root)?.header.staleFiles, 7)
+  }
+
+  func testCorruptGraphErrorNamesFileAndHint() throws {
+    try fm.createDirectory(at: sg, withIntermediateDirectories: true)
+    try "garbage\n".write(to: sg.appendingPathComponent("graph.local.txt"), atomically: true, encoding: .utf8)
+    XCTAssertThrowsError(try GraphStore.load(repo: Fixture.root)) { e in
+      XCTAssertTrue("\(e)".contains("graph.local.txt"), "\(e)")
+      XCTAssertTrue("\(e)".contains("swiftgraph index"), "\(e)")
+    }
+  }
+
+  func testHelpAndUsageExitCodes() throws {
+    let help = try run(["--help"])
+    XCTAssertEqual(help.status, 0, help.err)
+    XCTAssertTrue(help.out.contains("callers"), help.out)
+    XCTAssertEqual(try run(["callers", "--bogus", "x"]).status, 64)
   }
 
   func testStaleWarning() throws {

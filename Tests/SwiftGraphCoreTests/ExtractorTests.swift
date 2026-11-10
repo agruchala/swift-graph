@@ -171,6 +171,28 @@ final class ExtractorTests: XCTestCase {
     XCTAssertEqual(Extractor.swiftFiles(repoRoot: tmp), ["Zażółć.swift"])
   }
 
+  func testExternalNameAgreesOrStaysBare() {
+    XCTAssertEqual(Extractor.externalName(usr: "s:Sa3mapyqd__qd__xKXEKlF", name: "map(_:)", receivers: ["Array", "Set"]), "map(_:)")
+    XCTAssertEqual(Extractor.externalName(usr: "s:Sa3mapyqd__qd__xKXEKlF", name: "map(_:)", receivers: ["Array"]), "Array.map(_:)")
+    XCTAssertEqual(Extractor.externalName(usr: "c:objc(cs)NSString(py)length", name: "length", receivers: ["NSMutableString"]), "NSString.length")
+    XCTAssertEqual(Extractor.externalName(usr: "c:objc(pl)NSObject(im)isEqual:", name: "isEqual(_:)", receivers: []), "NSObject.isEqual(_:)")
+  }
+
+  func testObjCMemberNamedByDeclaringClass() throws {
+    XCTAssertTrue(try node("NSString.length").isExternal)
+    XCTAssertFalse(try g.nodes.values.contains { $0.name == "NSMutableString.length" })
+  }
+
+  func testIDCollisionThrows() throws {
+    var ex = Extractor(repoRoot: Fixture.root, storePaths: [try Fixture.storePath()], blocklist: [])
+    ex.idHash = { _ in "000000000000" }
+    XCTAssertThrowsError(try ex.extract())
+  }
+
+  func testSynthesizedInitOverridePruned() throws {
+    XCTAssertFalse(try g.nodes.values.contains { $0.name == "SubVM.init()" })
+  }
+
   func testNoGitRepo() throws {
     let tmp = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: tmp, withIntermediateDirectories: true)

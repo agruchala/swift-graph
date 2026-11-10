@@ -47,6 +47,17 @@ final class GraphTextTests: XCTestCase {
     XCTAssertTrue(id.allSatisfy { "0123456789abcdef".contains($0) })
   }
 
+  func testDecodeCRLF() throws {
+    let g = graph([a, b, c], [e1, e2])
+    let d = try GraphText.decode(GraphText.encode(g).replacingOccurrences(of: "\n", with: "\r\n"))
+    XCTAssertEqual(d.nodes, g.nodes)
+    XCTAssertEqual(Set(d.edges), Set(g.edges))
+  }
+
+  func testDecodeRejectsUnknownVersion() {
+    XCTAssertThrowsError(try GraphText.decode("# swiftgraph 2 commit=none dirty=0 stale=0\n"))
+  }
+
   func testDecodeRejectsGarbage() {
     XCTAssertThrowsError(try GraphText.decode("hello"))
   }

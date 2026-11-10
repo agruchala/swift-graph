@@ -16,3 +16,9 @@ final class Holder { deinit { cleanup() } }
 
 enum Outer { struct Inner { func inBody() {} } }
 extension Outer.Inner { func inExt() {} }
+
+import Foundation
+func objcLengths() -> Int { NSString(string: "a").length + NSMutableString(string: "b").length }
+
+class BaseVM { init() {} }
+final class SubVM: BaseVM {}

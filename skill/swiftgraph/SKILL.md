@@ -49,7 +49,8 @@ Profile.name  [instanceProperty]  Sources/Core/Profile.swift:1          ← root
 - `[test]` — test code. `--no-tests` hides it.
 - `[external Module]` — system framework or blocklisted third-party module. A leaf; never expanded.
 - `via protocol` / `via override` — dynamic dispatch: the call goes through a protocol requirement or base method. Under a callee, the implementations it can dispatch to are listed with this label.
-- `… (see above)` — already expanded earlier in this answer.
+- `… (see above)` — already expanded earlier in this answer. The call site on that line is still the one to open.
+- Exit codes: `0` answer printed, `1` no symbol matches, `2` ambiguous (candidates printed), `3` tool error (message on stderr), `64` bad usage.
 - `… N more nodes cut` — limits hit. Raise `--depth` / `--limit`, or query a deeper node directly.
 
 ## Freshness

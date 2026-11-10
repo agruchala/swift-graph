@@ -2,7 +2,10 @@ import Foundation
 
 public struct GraphTextError: Error, CustomStringConvertible {
   public var line: Int
-  public var description: String { "graph.txt: malformed line \(line)" }
+  public var file = "graph"
+  public var description: String {
+    "\(file): malformed line \(line) (merge conflict or newer format?); regenerate it with: swiftgraph index"
+  }
 }
 
 /// Tab-separated, one record per line, sorted:
@@ -28,7 +31,7 @@ public enum GraphText {
   }
 
   public static func decode(_ s: String) throws -> Graph {
-    let lines = s.split(separator: "\n", omittingEmptySubsequences: true)
+    let lines = s.split(whereSeparator: \.isNewline)  // also CRLF (one Character in Swift) from a Windows checkout
     guard let first = lines.first, first.hasPrefix("# swiftgraph ") else { throw GraphTextError(line: 1) }
     var fields: [String: String] = [:]
     let parts = first.split(separator: " ")
@@ -36,7 +39,7 @@ public enum GraphText {
       let kv = p.split(separator: "=", maxSplits: 1)
       if kv.count == 2 { fields[String(kv[0])] = String(kv[1]) }
     }
-    guard parts.count >= 3, let version = Int(parts[2]), let commit = fields["commit"],
+    guard parts.count >= 3, let version = Int(parts[2]), version == 1, let commit = fields["commit"],
           let stale = Int(fields["stale"] ?? "") else { throw GraphTextError(line: 1) }
     var g = Graph(header: Header(version: version, commit: commit, dirty: fields["dirty"] == "1", staleFiles: stale),
                   nodes: [:], edges: [])

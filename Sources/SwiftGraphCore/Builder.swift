@@ -1,9 +1,29 @@
 import Foundation
 
 public enum BuildError: Error, CustomStringConvertible {
-  case noBuildConfig
+  /// Projects found at the repo root with their shared/user schemes, e.g. `App.xcodeproj: App, Widget`.
+  case noBuildConfig(found: [String])
   public var description: String {
-    #"no index store found and nothing to build; add "project" and "schemes" to .swiftgraph/config.json"#
+    guard case .noBuildConfig(let found) = self else { return "" }
+    var s = #"no index store found and nothing to build; add "project" and "schemes" to .swiftgraph/config.json"#
+    for f in found { s += "\n  found " + f }
+    return s
+  }
+
+  public static func noBuildConfig(repo: URL) -> BuildError {
+    let fm = FileManager.default
+    let projects = ((try? fm.contentsOfDirectory(atPath: repo.path)) ?? [])
+      .filter { $0.hasSuffix(".xcodeproj") || $0.hasSuffix(".xcworkspace") }.sorted()
+    return .noBuildConfig(found: projects.map { p in
+      // Scheme files: xcshareddata/xcschemes/*.xcscheme, plus per-user ones Xcode autocreates.
+      var dirs = [p + "/xcshareddata/xcschemes"]
+      for u in (try? fm.contentsOfDirectory(atPath: repo.path + "/" + p + "/xcuserdata")) ?? [] {
+        dirs.append(p + "/xcuserdata/" + u + "/xcschemes")
+      }
+      let schemes = Set(dirs.flatMap { (try? fm.contentsOfDirectory(atPath: repo.path + "/" + $0)) ?? [] }
+        .filter { $0.hasSuffix(".xcscheme") }.map { String($0.dropLast(".xcscheme".count)) })
+      return "\(p): " + (schemes.isEmpty ? "(no schemes found)" : schemes.sorted().joined(separator: ", "))
+    })
   }
 }
 
@@ -26,6 +46,6 @@ public enum Builder {
       c.stores = []
       return StoreLocator.find(repoRoot: repo, config: c)
     }
-    throw BuildError.noBuildConfig
+    throw BuildError.noBuildConfig(repo: repo)
   }
 }

@@ -9,6 +9,7 @@ public struct Extractor {
   public var storePaths: [String]
   public var blocklist: Set<String>
   public var libIndexStorePath: String?
+  var idHash: (String) -> String = nodeID
 
   public init(repoRoot: URL, storePaths: [String], blocklist: Set<String>, libIndexStorePath: String? = nil) {
     self.repoRoot = repoRoot.standardizedFileURL
@@ -63,6 +64,17 @@ public struct Extractor {
       }
     }
     return files.filter { !$0.hasPrefix(".swiftgraph/") }.sorted()
+  }
+
+  /// Display name for a symbol defined outside the repo. ObjC USRs name the declaring class/protocol; otherwise
+  /// the receiver types the compiler recorded are used only when they all agree (`UIView.addSubview` called on a
+  /// stack view must not become `UIStackView.addSubview` for everyone).
+  static func externalName(usr: String, name: String, receivers: Set<String>) -> String {
+    if usr.hasPrefix("c:objc(cs)") || usr.hasPrefix("c:objc(pl)") {
+      let rest = usr.dropFirst("c:objc(cs)".count)
+      if let end = rest.firstIndex(of: "("), end > rest.startIndex { return "\(rest[..<end]).\(name)" }
+    }
+    return receivers.count == 1 ? "\(receivers.first!).\(name)" : name
   }
 
   public func extract() throws -> Graph {
@@ -149,8 +161,15 @@ public struct Extractor {
 
     var nodes: [String: Node] = [:]
     var idOf: [String: String] = [:]
-    for (usr, d) in defs {
-      let id = nodeID(usr: usr)
+    var usrOfID: [String: String] = [:]
+    func claimID(_ usr: String) throws -> String {
+      let id = idHash(usr)
+      if let other = usrOfID[id], other != usr { throw ExtractError.idCollision(id, other, usr) }
+      usrOfID[id] = usr
+      return id
+    }
+    for (usr, d) in defs.sorted(by: { $0.key < $1.key }) {
+      let id = try claimID(usr)
       idOf[usr] = id
       let module = d.occ.location.moduleName
       nodes[id] = Node(id: id, kind: "\(d.sym.kind)", module: module, name: displayName(usr),
@@ -166,6 +185,7 @@ public struct Extractor {
       static func < (a: Site, b: Site) -> Bool { (a.file, a.line, a.col) < (b.file, b.line, b.col) }
     }
     var sites: [Key: Set<Site>] = [:]
+    var externals: [String: (sym: Symbol, receivers: Set<String>)] = [:]  // by node id
 
     for (rel, occs) in perFile {
       // Type references by position, to qualify external constructors (`Date()` → `Date.init()`).
@@ -193,18 +213,20 @@ public struct Extractor {
           to = id
         } else {
           if kind == .ref { continue }
-          to = nodeID(usr: sym.usr)
-          if nodes[to] == nil {
-            let container = o.relations.first(where: { $0.roles.contains(.receivedBy) })?.symbol.name
-              ?? (sym.kind == .constructor ? typeAt[o.location.line]?[o.location.utf8Column] : nil)
-            nodes[to] = Node(id: to, kind: "\(sym.kind)", module: Self.moduleFromUSR(sym.usr),
-                             name: container.map { "\($0).\(sym.name)" } ?? sym.name,
-                             file: nil, line: nil, isTest: false, isExternal: true, isProtocolRequirement: false)
-          }
+          to = try claimID(sym.usr)
+          let receiver = o.relations.first(where: { $0.roles.contains(.receivedBy) })?.symbol.name
+            ?? (sym.kind == .constructor ? typeAt[o.location.line]?[o.location.utf8Column] : nil)
+          externals[to, default: (sym, [])].receivers.formUnion(receiver.map { [$0] } ?? [])
         }
         sites[Key(from: from, to: to, kind: kind), default: []]
           .insert(Site(file: rel, line: o.location.line, col: o.location.utf8Column))
       }
+    }
+
+    for (id, x) in externals {
+      nodes[id] = Node(id: id, kind: "\(x.sym.kind)", module: Self.moduleFromUSR(x.sym.usr),
+                       name: Self.externalName(usr: x.sym.usr, name: x.sym.name, receivers: x.receivers),
+                       file: nil, line: nil, isTest: false, isExternal: true, isProtocolRequirement: false)
     }
 
     // Override / conformance edges between our own definitions (accessor-level ones lifted to the property).
@@ -223,17 +245,27 @@ public struct Extractor {
       edges.append(Edge(from: k.from, to: k.to, kind: k.kind, file: first.file, line: first.line, more: lines - 1))
     }
 
-    // Blocklisted symbols stay only as edge targets; synthesized ones only when linked.
+    // Blocklisted symbols stay only as edge targets. Synthesized ones only when real code links to them: an
+    // override edge alone (a subclass's inherited `init()`) doesn't count.
     let targets = Set(edges.map(\.to))
-    let linked = targets.union(edges.map(\.from))
+    let linked = Set(edges.filter { $0.kind != .override }.flatMap { [$0.from, $0.to] })
     let implicitIDs = Set(implicit.compactMap { idOf[$0] })
     nodes = nodes.filter {
       $0.value.isExternal ? targets.contains($0.key) : (!implicitIDs.contains($0.key) || linked.contains($0.key))
     }
+    edges = edges.filter { nodes[$0.from] != nil && nodes[$0.to] != nil }
 
     let commit = (try? sh(["git", "rev-parse", "HEAD"], cwd: repoRoot)) ?? "none"
     let dirty = !((try? sh(["git", "status", "--porcelain", "--", "*.swift"], cwd: repoRoot)) ?? "").isEmpty
     return Graph(header: Header(commit: commit.isEmpty ? "none" : commit, dirty: dirty, staleFiles: stale),
                  nodes: nodes, edges: GraphText.sortedEdges(edges))
+  }
+}
+
+public enum ExtractError: Error, CustomStringConvertible {
+  case idCollision(String, String, String)
+  public var description: String {
+    guard case let .idCollision(id, a, b) = self else { return "" }
+    return "node id \(id) collides for USRs \(a) and \(b); please report this"
   }
 }

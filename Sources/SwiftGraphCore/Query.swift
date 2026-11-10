@@ -150,16 +150,15 @@ public struct Query {
     var count = 0
 
     func line(_ c: Child) -> String {
-      let head = (c.verb.map { $0 + " " } ?? "") + c.node.name
-      if isLeaf(c.node, opts) { return c.node.module == "external" ? "\(head)  [external]" : "\(head)  [external \(c.node.module)]" }
-      if expanded.contains(c.node.id) { return "\(head)  … (see above)" }
-      var s = head + "  "
-      if dir == .callers, let e = c.edge {
-        s += "\(e.file):\(e.line)"
-      } else {
-        s += Self.loc(c.node) ?? "?"
+      var s = (c.verb.map { $0 + " " } ?? "") + c.node.name
+      // Callers show the call site, which belongs to the edge: keep it even on leaf and repeat lines.
+      if dir == .callers, let e = c.edge { s += "  \(e.file):\(e.line)" }
+      if isLeaf(c.node, opts) { return s + (c.node.module == "external" ? "  [external]" : "  [external \(c.node.module)]") }
+      if dir == .callees {
+        s += "  " + (Self.loc(c.node) ?? "?")
         if let e = c.edge { s += "  (at :\(e.line))" }
       }
+      if expanded.contains(c.node.id) { return s + "  … (see above)" }
       if let more = c.edge?.more, more > 0 { s += "  (+\(more) more)" }
       if c.node.isTest { s += "  [test]" }
       if let v = c.via { s += "  " + v }

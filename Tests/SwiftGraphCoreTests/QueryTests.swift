@@ -106,7 +106,7 @@ final class QueryTests: XCTestCase {
   }
 
   func testRecursionTerminates() {
-    XCTAssertTrue(q.tree(loop, .callers, QueryOptions()).contains("called by ViewModel.loop(_:)  … (see above)"))
+    XCTAssertTrue(q.tree(loop, .callers, QueryOptions()).contains("called by ViewModel.loop(_:)  App/ViewModel.swift:14  … (see above)"))
   }
 
   func testExternalIsLeaf() {
@@ -127,7 +127,7 @@ final class QueryTests: XCTestCase {
   func testExcludedModuleIsLeaf() {
     var o = QueryOptions()
     o.exclude = ["AppTests"]
-    XCTAssertTrue(q.tree(rename, .callers, o).contains("called by ViewModelTests.testRename()  [external AppTests]"))
+    XCTAssertTrue(q.tree(rename, .callers, o).contains("called by ViewModelTests.testRename()  AppTests/ViewModelTests.swift:3  [external AppTests]"))
   }
 
   func testHideTests() {

@@ -26,16 +26,21 @@ public enum GraphStore {
     func mtime(_ u: URL) -> Date? {
       (try? FileManager.default.attributesOfItem(atPath: u.path))?[.modificationDate] as? Date
     }
-    let l = local(repo), c = committed(repo)
-    let pick: URL?
-    switch (mtime(l), mtime(c)) {
-    case let (lt?, ct?): pick = lt > ct ? l : c
-    case (_?, nil): pick = l
-    case (nil, _?): pick = c
-    case (nil, nil): pick = nil
+    func read(_ u: URL) throws -> Graph {
+      do { return try GraphText.decode(String(contentsOf: u, encoding: .utf8)) } catch var e as GraphTextError {
+        e.file = u.lastPathComponent
+        throw e
+      }
     }
-    guard let url = pick else { return nil }
-    return try GraphText.decode(String(contentsOf: url, encoding: .utf8))
+    let l = local(repo), c = committed(repo)
+    switch (mtime(l), mtime(c)) {
+    case let (lt?, ct?) where lt > ct:
+      // A broken local graph shouldn't hide a good committed one.
+      return try (try? read(l)) ?? read(c)
+    case (_, _?): return try read(c)
+    case (_?, nil): return try read(l)
+    case (nil, nil): return nil
+    }
   }
 
   public static func warning(for g: Graph, repo: URL) -> String? {
