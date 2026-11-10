@@ -1,0 +1,24 @@
+{
+  "name": "swiftgraph",
+  "owner": {
+    "name": "Artur G."
+  },
+  "metadata": {
+    "description": "Compiler-accurate call graph for Swift codebases: who calls, reads, or writes a symbol, and what it touches, in one call."
+  },
+  "plugins": [
+    {
+      "name": "swiftgraph",
+      "description": "Answers \"who calls / reads / writes this?\" and \"what does this call?\" for Swift and Xcode projects from the compiler's own index, as a compact file:line tree. Use it before grepping.",
+      "version": "0.1.0",
+      "author": {
+        "name": "Artur G."
+      },
+      "category": "development",
+      "keywords": ["swift", "xcode", "call-graph", "callers", "callees", "index-store", "ios", "macos"],
+      "source": "./",
+      "skills": ["./skills/swiftgraph"],
+      "strict": false
+    }
+  ]
+}

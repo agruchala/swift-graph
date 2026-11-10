@@ -70,12 +70,12 @@ Only compiler-recorded links. These won't appear — grep for them:
 - SwiftUI `@Environment` / `@EnvironmentObject` injection
 - reflection, string-based lookups, code not built yet
 
-## Install
+## Running it
 
-Requires macOS with Xcode. In the SwiftGraph repo:
+Requires macOS with Xcode. If `swiftgraph` is on `PATH`, use it. Otherwise run the wrapper next to this file, `scripts/swiftgraph` (in this skill's base directory). It builds the tool with Xcode's Swift on first use (about a minute) and then runs it:
 
 ```bash
-swift build -c release
+<skill base directory>/scripts/swiftgraph callers <symbol>
 ```
 
-The binary is at `$(swift build -c release --show-bin-path)/swiftgraph`; put it on your `PATH`. If `swift` on `PATH` is not Xcode's (e.g. a swiftly toolchain), use `xcrun swift build -c release`.
+To put it on `PATH` instead, run `xcrun swift build -c release` in the repo root and link `$(xcrun swift build -c release --show-bin-path)/swiftgraph`.

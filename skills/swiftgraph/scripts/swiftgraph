@@ -1,0 +1,10 @@
+#!/bin/sh
+# Runs swiftgraph from this repo, building it (release, with Xcode's Swift) on first use.
+set -e
+ROOT=$(cd -P "$(dirname "$0")/../../.." && pwd)  # -P: works through a symlinked skill dir
+for BIN in "$ROOT/.build/out/Products/Release/swiftgraph" "$ROOT/.build/release/swiftgraph"; do
+  [ -x "$BIN" ] && exec "$BIN" "$@"
+done
+echo "building swiftgraph (first run, ~1 min)..." >&2
+xcrun swift build -c release --package-path "$ROOT" >&2
+exec "$(xcrun swift build -c release --package-path "$ROOT" --show-bin-path)/swiftgraph" "$@"
