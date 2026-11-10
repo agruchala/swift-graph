@@ -1,5 +1,7 @@
 # SwiftGraph
 
+![SwiftGraph: a compiler-accurate call graph for Swift](assets/banner.png)
+
 An agent skill and a command-line tool that answer "who calls / reads / writes this?" and "what does this call?" for Swift code in one call. Answers come from the compiler's own index store, so overloads, protocol dispatch and property accesses are resolved the way the compiler resolved them: no text matching, no guessed edges.
 
 ```
@@ -19,13 +21,14 @@ Profile.name  [instanceProperty]  Sources/Core/Profile.swift:1
 In Claude Code:
 
 ```
-/plugin marketplace add <this repo's git URL or local path>
+/plugin marketplace add agruchala/swift-graph
 /plugin install swiftgraph@swiftgraph
 ```
 
-Or clone this repo and link the skill into your personal skills:
+Or clone the repo and link the skill into your personal skills:
 
 ```bash
+git clone https://github.com/agruchala/swift-graph.git && cd swift-graph
 ln -s "$PWD/skills/swiftgraph" ~/.claude/skills/swiftgraph
 ```
 
@@ -94,3 +97,7 @@ xcrun swift test
 ```
 
 The tests build a small fixture package in `Tests/Fixtures/Sample` and check extraction against its index.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

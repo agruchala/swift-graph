@@ -14,6 +14,7 @@
       "author": {
         "name": "Artur G."
       },
+      "license": "MIT",
       "category": "development",
       "keywords": ["swift", "xcode", "call-graph", "callers", "callees", "index-store", "ios", "macos"],
       "source": "./",
