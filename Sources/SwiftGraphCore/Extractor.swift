@@ -86,7 +86,14 @@ public struct Extractor {
     var nameOf: [String: String] = [:]
     var parentOf: [String: Symbol] = [:]
     var accessorOf: [String: String] = [:]  // accessor USR → property USR
+    var implicit: Set<String> = []  // synthesized (memberwise inits, NSObject overrides): kept only if linked
+    // (impl USR, base USR, site). Recorded on definitions, and as implicit occurrences at
+    // retroactive conformances (`extension Foo: Proto {}`).
+    var overrides: [(String, String, String, SymbolLocation)] = []
     for (rel, occs) in perFile {
+      for o in occs {
+        for r in o.relations where r.roles.contains(.overrideOf) { overrides.append((o.symbol.usr, r.symbol.usr, rel, o.location)) }
+      }
       for o in occs where o.roles.contains(.definition) {
         let usr = o.symbol.usr
         if let prop = o.relations.first(where: { $0.roles.contains(.accessorOf) }) {
@@ -95,10 +102,10 @@ public struct Extractor {
         }
         if nameOf[usr] == nil { nameOf[usr] = o.symbol.name }
         if let p = o.relations.first(where: { $0.roles.contains(.childOf) }), parentOf[usr] == nil { parentOf[usr] = p.symbol }
-        // Implicit definitions (synthesized inits, NSObject overrides) aren't code anyone wrote.
-        guard Self.keptKinds.contains(o.symbol.kind), !o.symbol.properties.contains(.local),
-              !o.roles.contains(.implicit), defs[usr] == nil else { continue }
+        guard Self.keptKinds.contains(o.symbol.kind), !o.symbol.properties.contains(.local), defs[usr] == nil
+        else { continue }
         defs[usr] = (o.symbol, o, rel)
+        if o.roles.contains(.implicit) { implicit.insert(usr) }
       }
     }
 
@@ -107,6 +114,9 @@ public struct Extractor {
       guard depth < 8, let p = parentOf[usr] else { return own }
       return displayName(p.usr, depth: depth + 1) + "." + own
     }
+
+    // Modules whose source is in the repo. Their undefined symbols are macro-generated or stale, not external.
+    let ownModules = Set(defs.values.map(\.occ.location.moduleName)).subtracting(blocklist)
 
     var nodes: [String: Node] = [:]
     var idOf: [String: String] = [:]
@@ -134,7 +144,8 @@ public struct Extractor {
       for o in occs where Self.typeKinds.contains(o.symbol.kind) && o.roles.contains(.reference) {
         typeAt[o.location.line, default: [:]][o.location.utf8Column] = o.symbol.name
       }
-      for o in occs where o.roles.contains(.reference) {
+      // Implicit references (result builders, literals, property wrappers, macro expansions) aren't code anyone wrote.
+      for o in occs where o.roles.contains(.reference) && !o.roles.contains(.implicit) {
         if blocklist.contains(o.location.moduleName) { break }
         let sym = o.symbol
         guard Self.keptKinds.contains(sym.kind), !sym.properties.contains(.local), !Self.isAccessorName(sym.name)
@@ -152,7 +163,7 @@ public struct Extractor {
         if let id = idOf[sym.usr] {
           to = id
         } else {
-          if kind == .ref { continue }
+          if kind == .ref || ownModules.contains(Self.moduleFromUSR(sym.usr)) { continue }
           to = nodeID(usr: sym.usr)
           if nodes[to] == nil {
             let container = o.relations.first(where: { $0.roles.contains(.receivedBy) })?.symbol.name
@@ -167,13 +178,12 @@ public struct Extractor {
       }
     }
 
-    // Override / conformance edges between our own definitions.
-    for (usr, d) in defs where !nodes[idOf[usr]!]!.isExternal {
-      for r in d.occ.relations where r.roles.contains(.overrideOf) {
-        guard let base = idOf[r.symbol.usr], nodes[base]?.isExternal == false else { continue }
-        sites[Key(from: idOf[usr]!, to: base, kind: .override), default: []]
-          .insert(Site(file: d.rel, line: d.occ.location.line, col: d.occ.location.utf8Column))
-      }
+    // Override / conformance edges between our own definitions (accessor-level ones lifted to the property).
+    for (implUSR, baseUSR, rel, loc) in overrides {
+      guard let impl = idOf[accessorOf[implUSR] ?? implUSR], let base = idOf[accessorOf[baseUSR] ?? baseUSR], impl != base,
+            nodes[impl]?.isExternal == false, nodes[base]?.isExternal == false else { continue }
+      sites[Key(from: impl, to: base, kind: .override), default: []]
+        .insert(Site(file: rel, line: loc.line, col: loc.utf8Column))
     }
 
     var edges: [Edge] = []
@@ -184,9 +194,13 @@ public struct Extractor {
       edges.append(Edge(from: k.from, to: k.to, kind: k.kind, file: first.file, line: first.line, more: lines - 1))
     }
 
-    // Blocklisted symbols stay only as edge targets.
+    // Blocklisted symbols stay only as edge targets; synthesized ones only when linked.
     let targets = Set(edges.map(\.to))
-    nodes = nodes.filter { !$0.value.isExternal || targets.contains($0.key) }
+    let linked = targets.union(edges.map(\.from))
+    let implicitIDs = Set(implicit.compactMap { idOf[$0] })
+    nodes = nodes.filter {
+      $0.value.isExternal ? targets.contains($0.key) : (!implicitIDs.contains($0.key) || linked.contains($0.key))
+    }
 
     let commit = (try? sh(["git", "rev-parse", "HEAD"], cwd: repoRoot)) ?? "none"
     let dirty = !((try? sh(["git", "status", "--porcelain", "--", "*.swift"], cwd: repoRoot)) ?? "").isEmpty

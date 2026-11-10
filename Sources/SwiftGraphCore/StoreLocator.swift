@@ -36,13 +36,13 @@ public enum StoreLocator {
     return found.sorted()
   }
 
-  /// Directories holding `v5/units` (SwiftPM `index/store`, Swift Build `.build/out`).
+  /// Directories holding `v5/units`: SwiftPM `index/store`, Swift Build `.build/out` (default builds)
+  /// and `.build/out/Products/<Config>/index/store` (`--enable-index-store`). Stores can nest; all are returned.
   static func swiftPMStores(in dir: String, depth: Int) -> [String] {
     let fm = FileManager.default
-    if fm.fileExists(atPath: dir + "/v5/units") { return [dir] }
-    guard depth > 0 else { return [] }
-    let skip: Set<String> = ["checkouts", "repositories", "artifacts"]
-    var out: [String] = []
+    var out: [String] = fm.fileExists(atPath: dir + "/v5/units") ? [dir] : []
+    guard depth > 0 else { return out }
+    let skip: Set<String> = ["checkouts", "repositories", "artifacts", "v5"]
     for sub in (try? fm.contentsOfDirectory(atPath: dir)) ?? [] where !skip.contains(sub) && !sub.hasSuffix(".noindex") {
       var isDir: ObjCBool = false
       let p = dir + "/" + sub

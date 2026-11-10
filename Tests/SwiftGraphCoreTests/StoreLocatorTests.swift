@@ -72,6 +72,15 @@ final class StoreLocatorTests: XCTestCase {
     XCTAssertEqual(StoreLocator.find(repoRoot: repo, config: Config(), derivedDataRoot: try emptyDerivedData()), [store.path])
   }
 
+  func testFindsNestedSwiftBuildStores() throws {
+    let outer = repo.appendingPathComponent(".build/out")
+    let inner = outer.appendingPathComponent("Products/Debug/index/store")
+    try makeStore(outer)
+    try makeStore(inner)
+    XCTAssertEqual(StoreLocator.find(repoRoot: repo, config: Config(), derivedDataRoot: try emptyDerivedData()),
+                   [outer.path, inner.path])
+  }
+
   func testFindsLocalDerivedData() throws {
     let store = repo.appendingPathComponent(".swiftgraph/DerivedData/Index.noindex/DataStore")
     try makeStore(store)

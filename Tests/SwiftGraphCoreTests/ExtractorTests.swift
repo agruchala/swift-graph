@@ -18,8 +18,9 @@ final class ExtractorTests: XCTestCase {
   }
 
   func node(_ name: String, in graph: Graph? = nil) throws -> Node {
-    let matches = try (graph ?? g).nodes.values.filter { $0.name == name }
-    XCTAssertEqual(matches.count, 1, "nodes named \(name): \(matches)")
+    let all = try graph ?? g
+    let matches = all.nodes.values.filter { $0.name == name }
+    XCTAssertEqual(matches.count, 1, "nodes named \(name): \(matches) of \(all.nodes.values.map(\.name).sorted())")
     return try XCTUnwrap(matches.first)
   }
 
@@ -44,6 +45,11 @@ final class ExtractorTests: XCTestCase {
 
   func testOverrideEdge() throws {
     XCTAssertNotNil(try edge("DiskStore.save(_:)", "Store.save(_:)", .override))
+  }
+
+  func testRetroactiveConformanceOverrideEdge() throws {
+    XCTAssertNotNil(try edge("Event.stamp", "Stamped.stamp", .override))
+    XCTAssertNotNil(try edge("readStamp(_:)", "Stamped.stamp", .read))
   }
 
   func testClosureAttributedToEnclosingFunction() throws {
@@ -97,6 +103,33 @@ final class ExtractorTests: XCTestCase {
   func testDuplicateStoreDeduped() throws {
     let s = try Fixture.storePath()
     XCTAssertEqual(GraphText.encode(try extract(stores: [s, s])), GraphText.encode(try extract(stores: [s])))
+  }
+
+  func testSynthesizedInitIsInternal() throws {
+    XCTAssertNotNil(try edge("makeTag()", "Tag.init(label:)", .call))
+    let n = try node("Tag.init(label:)")
+    XCTAssertFalse(n.isExternal)
+    XCTAssertEqual(n.file, "Sources/App/Extras.swift")
+  }
+
+  func testObservableWriteIsInternal() throws {
+    XCTAssertNotNil(try edge("bump(_:)", "Counter.count", .write))
+  }
+
+  func testNoExternalsFromOwnModules() throws {
+    let own: Set<String> = ["App", "Core", "Vendor", "AppTests"]
+    XCTAssertEqual(try g.nodes.values.filter { $0.isExternal && own.contains($0.module) }.map(\.name), [])
+  }
+
+  func testImplicitReferencesSkipped() throws {
+    // @Observable's expansion calls ObservationRegistrar.withMutation/access implicitly.
+    let gr = try g
+    let names = Set(gr.edges.compactMap { gr.nodes[$0.to]?.name })
+    XCTAssertFalse(names.contains { $0.contains("withMutation") || $0.contains("access(") }, "\(names.sorted())")
+  }
+
+  func testUnreferencedImplicitMembersPruned() throws {
+    XCTAssertFalse(try g.nodes.values.contains { $0.name == "ViewModelTests.init(invocation:)" })
   }
 
   func testNoGitRepo() throws {

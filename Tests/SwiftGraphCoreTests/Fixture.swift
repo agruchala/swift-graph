@@ -15,7 +15,7 @@ enum Fixture {
     if built == nil {
       built = Result {
         try sh(["xcrun", "swift", "build", "--build-tests", "--enable-index-store", "--package-path", root.path], cwd: root)
-        let store = root.appendingPathComponent(".build/out").path
+        let store = root.appendingPathComponent(".build/out/Products/Debug/index/store").path
         guard FileManager.default.fileExists(atPath: store + "/v5/units") else {
           throw ShellError(status: 1, stderr: "no index store at \(store)")
         }
