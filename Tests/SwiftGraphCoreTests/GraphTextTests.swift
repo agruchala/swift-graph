@@ -24,6 +24,14 @@ final class GraphTextTests: XCTestCase {
     XCTAssertEqual(Set(decoded.edges), Set(g.edges))
   }
 
+  func testMissingFilesRoundTrip() throws {
+    var g = graph([a], [])
+    g.missing = ["Sources/B.swift", "My App/A.swift"]
+    let text = GraphText.encode(g)
+    XCTAssertTrue(text.hasSuffix("M\tMy App/A.swift\nM\tSources/B.swift\n"), text)
+    XCTAssertEqual(try GraphText.decode(text).missing, ["My App/A.swift", "Sources/B.swift"])
+  }
+
   func testDeterministic() {
     XCTAssertEqual(GraphText.encode(graph([a, b, c], [e1, e2])), GraphText.encode(graph([c, a, b], [e2, e1])))
   }

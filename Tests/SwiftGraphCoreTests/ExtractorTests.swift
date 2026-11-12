@@ -100,6 +100,16 @@ final class ExtractorTests: XCTestCase {
     XCTAssertEqual(try extract().header.staleFiles, 1)
   }
 
+  func testPreviouslyIndexedFileWithoutUnitIsMissing() throws {
+    let expected: Set<String> = ["Sources/Core/Profile.swift", "Sources/Gone.swift"]
+    func missing(_ stores: [String]) throws -> [String] {
+      try Extractor(repoRoot: Fixture.root, storePaths: stores, blocklist: [], expected: expected).extract().missing
+    }
+    // Store wiped: the file is still on disk but nothing indexes it. A deleted file is not missing.
+    XCTAssertEqual(try missing([]), ["Sources/Core/Profile.swift"])
+    XCTAssertEqual(try missing([Fixture.storePath()]), [])
+  }
+
   func testDuplicateStoreDeduped() throws {
     let s = try Fixture.storePath()
     XCTAssertEqual(GraphText.encode(try extract(stores: [s, s])), GraphText.encode(try extract(stores: [s])))

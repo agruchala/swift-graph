@@ -65,7 +65,7 @@ Exit codes: `0` answer, `1` no match, `2` ambiguous, `3` tool error, `64` bad us
 2. **Extraction:** every Swift file git knows about is read from the store with the newest unit for it. Symbols are types, functions, properties, initializers and enum cases. Edges are calls, reads, writes, type references, and override/conformance links.
 3. **Leaves:** system frameworks and blocklisted modules appear only as `[external]` leaves and are never walked into. Calls the compiler inserted itself (result builders, literals, property-wrapper and macro plumbing) are left out.
 4. **Storage:** the graph goes to `.swiftgraph/graph.txt` (with `--ci`, meant to be committed) or `.swiftgraph/graph.local.txt` (local, gitignored). It's one sorted, tab-separated record per line, so diffs stay small and the same index gives a byte-identical file.
-5. **Queries:** they read the newer of the two files. A line starting with `!` means the graph is older than the code.
+5. **Queries:** they read the newer of the two files. A line starting with `!` means the graph is older than the code, or that files indexed before have lost their index data (DerivedData wiped or partly rebuilt). `index --build` fixes both.
 
 ### `.swiftgraph/config.json`
 

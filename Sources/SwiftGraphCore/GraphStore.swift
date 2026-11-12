@@ -44,6 +44,10 @@ public enum GraphStore {
   }
 
   public static func warning(for g: Graph, repo: URL) -> String? {
+    if !g.missing.isEmpty {
+      return "! \(g.missing.count) files indexed before have no index data now (index store wiped or partly built), "
+        + "so their symbols are missing; run: swiftgraph index --build"
+    }
     if g.header.staleFiles > 0 {
       return "! graph built from a stale index (\(g.header.staleFiles) files changed since last build); run: swiftgraph index --build"
     }

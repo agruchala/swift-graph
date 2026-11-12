@@ -12,6 +12,7 @@ public struct GraphTextError: Error, CustomStringConvertible {
 ///   # swiftgraph 1 commit=<sha|none> dirty=<0|1> stale=<n>
 ///   N <id> <kind> <module> <name> <file:line|-> <flags|->     flags ⊆ "tpx"
 ///   E <from> <to> <kind> <file:line> <more>
+///   M <file>                                                  indexed before, no index data now
 public enum GraphText {
   public static func encode(_ g: Graph) -> String {
     let h = g.header
@@ -27,6 +28,7 @@ public enum GraphText {
     for e in sortedEdges(g.edges) {
       out += ["E", e.from, e.to, e.kind.rawValue, "\(e.file):\(e.line)", String(e.more)].joined(separator: "\t") + "\n"
     }
+    for f in g.missing.sorted() { out += "M\t\(f)\n" }
     return out
   }
 
@@ -58,6 +60,9 @@ public enum GraphText {
         guard f.count == 6, let kind = EdgeKind(rawValue: f[3]), let loc = splitLoc(f[4]), let more = Int(f[5])
         else { throw bad }
         g.edges.append(Edge(from: f[1], to: f[2], kind: kind, file: loc.0, line: loc.1, more: more))
+      case "M":
+        guard f.count == 2 else { throw bad }
+        g.missing.append(f[1])
       default:
         throw bad
       }

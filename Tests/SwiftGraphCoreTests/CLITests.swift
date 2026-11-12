@@ -160,4 +160,12 @@ final class CLITests: XCTestCase {
     let head = try sh(["git", "rev-parse", "HEAD"], cwd: Fixture.root)
     XCTAssertEqual(GraphStore.warning(for: g, repo: Fixture.root), "! graph built from 0123456, HEAD is \(head.prefix(7))")
   }
+
+  func testMissingFilesWarning() {
+    var g = Graph(header: Header(commit: "none", dirty: false, staleFiles: 3), nodes: [:], edges: [])
+    g.missing = ["A.swift", "B.swift"]
+    XCTAssertEqual(GraphStore.warning(for: g, repo: Fixture.root),
+                   "! 2 files indexed before have no index data now (index store wiped or partly built), "
+                     + "so their symbols are missing; run: swiftgraph index --build")
+  }
 }

@@ -58,6 +58,7 @@ Profile.name  [instanceProperty]  Sources/Core/Profile.swift:1          ← root
 The graph reflects the last indexed build. A first line starting with `!` means it may be out of date:
 
 - `! graph built from a stale index …` or `! graph built from <sha>, HEAD is <sha>` — if you need code changed since then, run `swiftgraph index --build` (builds with indexing, then refreshes `.swiftgraph/graph.local.txt`). Plain `swiftgraph index` re-reads existing indexes without building.
+- `! N files indexed before have no index data now …` — the index store was wiped or only partly rebuilt (e.g. DerivedData cleaned), so symbols from those files are missing from every answer. Run `swiftgraph index --build` before trusting "no callers".
 - No graph yet? The first query creates one and says `(no graph found; indexed first)`.
 
 CI owns the committed `.swiftgraph/graph.txt` (`swiftgraph index --build --ci`). Local runs write only `graph.local.txt`, which is gitignored. Config (blocklist, project, schemes, explicit store paths) lives in `.swiftgraph/config.json`.

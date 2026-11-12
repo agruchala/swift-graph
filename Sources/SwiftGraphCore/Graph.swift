@@ -52,9 +52,12 @@ public struct Graph: Equatable, Sendable {
   public var header: Header
   public var nodes: [String: Node]
   public var edges: [Edge]
+  /// Files an earlier graph had index data for that are still in the repo but have none now (store wiped or
+  /// partly rebuilt). Carried into the next plain `index` so the warning survives until a full build.
+  public var missing: [String]
 
-  public init(header: Header, nodes: [String: Node], edges: [Edge]) {
-    self.header = header; self.nodes = nodes; self.edges = edges
+  public init(header: Header, nodes: [String: Node], edges: [Edge], missing: [String] = []) {
+    self.header = header; self.nodes = nodes; self.edges = edges; self.missing = missing
   }
 }
 

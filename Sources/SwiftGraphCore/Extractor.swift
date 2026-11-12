@@ -9,13 +9,17 @@ public struct Extractor {
   public var storePaths: [String]
   public var blocklist: Set<String>
   public var libIndexStorePath: String?
+  /// Repo-relative files an earlier graph had index data for; any still on disk without data now is `missing`.
+  public var expected: Set<String>
   var idHash: (String) -> String = nodeID
 
-  public init(repoRoot: URL, storePaths: [String], blocklist: Set<String>, libIndexStorePath: String? = nil) {
+  public init(repoRoot: URL, storePaths: [String], blocklist: Set<String>, libIndexStorePath: String? = nil,
+              expected: Set<String> = []) {
     self.repoRoot = repoRoot.standardizedFileURL
     self.storePaths = storePaths
     self.blocklist = blocklist
     self.libIndexStorePath = libIndexStorePath
+    self.expected = expected
   }
 
   public static func defaultLibPath() throws -> String {
@@ -120,6 +124,9 @@ public struct Extractor {
     if let newest = perFile.compactMap({ f in dbs.compactMap { $0.dateOfLatestUnitFor(filePath: root + "/" + f.rel) }.max() }).max() {
       stale += unindexed.filter { $0 > newest }.count
     }
+    // Older unindexed files are normal (never compiled), unless an earlier graph had them: then the store lost them.
+    let indexed = Set(perFile.map(\.rel))
+    let missing = expected.filter { !indexed.contains($0) && FileManager.default.fileExists(atPath: root + "/" + $0) }
 
     // Pass 1: definitions.
     var defs: [String: (sym: Symbol, occ: SymbolOccurrence, rel: String)] = [:]
@@ -258,7 +265,7 @@ public struct Extractor {
     let commit = (try? sh(["git", "rev-parse", "HEAD"], cwd: repoRoot)) ?? "none"
     let dirty = !((try? sh(["git", "status", "--porcelain", "--", "*.swift"], cwd: repoRoot)) ?? "").isEmpty
     return Graph(header: Header(commit: commit.isEmpty ? "none" : commit, dirty: dirty, staleFiles: stale),
-                 nodes: nodes, edges: GraphText.sortedEdges(edges))
+                 nodes: nodes, edges: GraphText.sortedEdges(edges), missing: missing.sorted())
   }
 }
 

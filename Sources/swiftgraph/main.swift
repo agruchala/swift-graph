@@ -19,7 +19,12 @@ func runIndex(repo: URL, build: Bool, ci: Bool) throws -> (Graph, URL) {
   var stores = build ? try Builder.build(repo: repo, config: config) : StoreLocator.find(repoRoot: repo, config: config)
   if stores.isEmpty && !build { stores = try Builder.build(repo: repo, config: config) }
   if stores.isEmpty { throw BuildError.noBuildConfig(repo: repo) }
-  let g = try Extractor(repoRoot: repo, storePaths: stores, blocklist: Set(config.blocklist)).extract()
+  // A full build is the truth. Otherwise, files the previous graph had must still have index data.
+  var expected: Set<String> = []
+  if !build, let prev = try? GraphStore.load(repo: repo) {
+    expected = Set(prev.nodes.values.compactMap { $0.isExternal ? nil : $0.file }).union(prev.missing)
+  }
+  let g = try Extractor(repoRoot: repo, storePaths: stores, blocklist: Set(config.blocklist), expected: expected).extract()
   // Never write an empty graph: every later query would trust it instead of re-indexing.
   guard !g.nodes.isEmpty else { throw IndexError.empty(stores) }
   return (g, try GraphStore.write(g, repo: repo, ci: ci))
